@@ -239,3 +239,7 @@ graph TD
 * Интерактивная документация API (Swagger UI): `http://localhost:8000/docs`.
 * Проверка готовности ИИ-агента (Healthcheck): `http://localhost:8001/api/v1/health`.
 * Остановка и очистка контейнеров выполняется командой: `docker compose down`.
+
+---
+
+## 7. Порядок контроля и приемки
