@@ -1,87 +1,33 @@
-"""ИИ-агент приоритизации: абстрактный класс + реализации ."""
-
-from __future__ import annotations
-
 from abc import ABC, abstractmethod
+from typing import Tuple
+from src.models import Priority
 
-from models import ClassificationResult, Priority
 
-
-class PriorityClassifier(ABC):
-    """Абстрактный классификатор приоритета заявок."""
+class BasePriorityClassifier(ABC):
+    # Абстрактный интерфейс классификатора
 
     @abstractmethod
-    def classify(self, title: str, description: str) -> ClassificationResult:
-        """Возвращает рассчитанный приоритет заявки и уверенность модели."""
-        ...
+    def predict(self, title: str, description: str) -> Tuple[Priority, float]:
+        pass
 
 
-class KeywordPriorityClassifier(PriorityClassifier):
-    """Классификатор на основе анализа ключевых слов в тексте заявки."""
+class KeywordAIAgent(BasePriorityClassifier):
+    # Имитация ИИ-агента с анализом ключевых слов и расчетом уверенности (Confidence Score)
 
-    KEYWORDS: dict[Priority, tuple[str, ...]] = {
-        Priority.CRITICAL: (
-            "авария",
-            "сбой",
-            "не работает",
-            "критично",
-            "остановка",
-            "падение",
-            "недоступен",
-        ),
-        Priority.HIGH: (
-            "срочно",
-            "важно",
-            "ошибка",
-            "проблема",
-            "нарушение",
-        ),
-        Priority.MEDIUM: (
-            "запрос",
-            "уточнение",
-            "вопрос",
-            "помощь",
-            "настройка",
-        ),
-        Priority.LOW: (
-            "информация",
-            "консультация",
-            "предложение",
-            "пожелание",
-            "документация",
-        ),
-    }
-
-    def classify(self, title: str, description: str) -> ClassificationResult:
-        """Определяет приоритет по числу совпавших ключевых слов."""
+    def predict(self, title: str, description: str) -> Tuple[Priority, float]:
         text = f"{title} {description}".lower()
-        for priority in (Priority.CRITICAL, Priority.HIGH, Priority.MEDIUM, Priority.LOW):
-            matches = sum(1 for keyword in self.KEYWORDS[priority] if keyword in text)
-            if matches > 0:
-                confidence = min(0.6 + matches * 0.1, 0.99)
-                return ClassificationResult(priority=priority, confidence=confidence)
-        return ClassificationResult(priority=Priority.MEDIUM, confidence=0.5)
 
+        # Проверка на критические сбои
+        if any(word in text for word in ["авария", "упал", "лежит", "блокирует", "критично"]):
+            return Priority.CRITICAL, 0.95
 
-class FallbackPriorityClassifier(PriorityClassifier):
-    """Резервный классификатор: применяется при недоступности ИИ-сервиса."""
+        # Проверка на высокий приоритет
+        if any(word in text for word in ["ошибка", "не работает", "срочно", "сбой"]):
+            return Priority.HIGH, 0.85
 
-    def classify(self, title: str, description: str) -> ClassificationResult:
-        """Всегда возвращает средний приоритет с нулевой уверенностью."""
-        return ClassificationResult(priority=Priority.MEDIUM, confidence=0.0)
+        # Проверка на низкий приоритет
+        if any(word in text for word in ["вопрос", "консультация", "уточнить", "информация"]):
+            return Priority.LOW, 0.90
 
-
-class SafePriorityClassifier(PriorityClassifier):
-    """Обёртка, использующая резервный классификатор при сбое основного."""
-
-    def __init__(self, primary: PriorityClassifier, fallback: PriorityClassifier) -> None:
-        """Принимает основной и резервный классификаторы."""
-        self._primary = primary
-        self._fallback = fallback
-
-    def classify(self, title: str, description: str) -> ClassificationResult:
-        """Пытается вызвать основной классификатор, при ошибке — резервный."""
-        try:
-            return self._primary.classify(title, description)
-        except Exception:
-            return self._fallback.classify(title, description)
+        # Если ИИ не уверен - ставится средний приоритет с низким коэффициентом
+        return Priority.MEDIUM, 0.50
