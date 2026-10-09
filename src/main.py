@@ -4,7 +4,8 @@ from src.repository import TicketRepository
 from src.service import CRMService
 
 
-def main():
+def main() -> None:
+    """Точка входа: сборка зависимостей и запуск приложения."""
     repo = TicketRepository()
     ai_agent = KeywordAIAgent()
     crm_service = CRMService(repo=repo, classifier=ai_agent)
