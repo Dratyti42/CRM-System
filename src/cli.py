@@ -97,10 +97,16 @@ class ConsoleUI:
         desc = input("Описание проблемы: ").strip()
 
         ticket = self.service.create_ticket(title, desc, client_name)
-        print(f"\n[УСПЕХ] Заявка #{ticket.id} создана со статусом '{ticket.status.value}'!")
-        print(f"-> ИИ определил приоритет: [{ticket.priority.value}] (Уверенность: {ticket.confidence_score * 100:.0f}%)")
+        print(
+            f"\n[УСПЕХ] Заявка #{ticket.id} создана со статусом '{ticket.status.value}'!"
+        )
+        print(
+            f"-> ИИ определил приоритет: [{ticket.priority.value}] (Уверенность: {ticket.confidence_score * 100:.0f}%)"
+        )
         if ticket.confidence_score < 0.6:
-            print("-> Примечание: Требуется подтверждение приоритета оператором (низкая уверенность ИИ).")
+            print(
+                "-> Примечание: Требуется подтверждение приоритета оператором (низкая уверенность ИИ)."
+            )
 
     def _list_tickets(self) -> None:
         """Отобразить упорядоченный список обращений для оператора."""
@@ -112,7 +118,9 @@ class ConsoleUI:
         print("\n--- ОЧЕРЕДЬ ЗАЯВОК (СОРТИРОВКА ПО ПРИОРИТЕТУ) ---")
         for t in tickets:
             override_flag = " [РУЧНОЙ ПРИОРИТЕТ]" if t.manual_priority_override else ""
-            print(f"#{t.id} | Приоритет: {t.priority.value:<9}{override_flag} | Статус: {t.status.value:<12} | Клиент: {t.client_name}")
+            print(
+                f"#{t.id} | Приоритет: {t.priority.value:<9}{override_flag} | Статус: {t.status.value:<12} | Клиент: {t.client_name}"
+            )
             print(f"    Тема: {t.title}")
             print(f"    Оператор: {t.operator_name or 'Не назначен'}")
             print("-" * 45)
@@ -124,7 +132,9 @@ class ConsoleUI:
             operator = input("Имя оператора: ").strip()
             ticket = self.service.take_ticket_to_work(t_id, operator)
             if ticket:
-                print(f"[УСПЕХ] Заявка #{ticket.id} переведена в статус '{ticket.status.value}', оператор: {operator}")
+                print(
+                    f"[УСПЕХ] Заявка #{ticket.id} переведена в статус '{ticket.status.value}', оператор: {operator}"
+                )
             else:
                 print("Заявка с таким ID не найдена.")
         except ValueError:
@@ -134,12 +144,16 @@ class ConsoleUI:
         """Изменить категорию приоритета вручную."""
         try:
             t_id = int(input("\nВведите ID заявки: "))
-            print("Доступные приоритеты: 1. Низкий | 2. Средний | 3. Высокий | 4. Наивысший")
+            print(
+                "Доступные приоритеты: 1. Низкий | 2. Средний | 3. Высокий | 4. Наивысший"
+            )
             p_input = int(input("Выберите новый приоритет (1-4): ").strip())
             p_choice = PriorityChoice(p_input)
             ticket = self.service.override_priority(t_id, PRIORITY_MAP[p_choice])
             if ticket:
-                print(f"[УСПЕХ] Приоритет заявки #{ticket.id} изменен на '{ticket.priority.value}' вручную (зафиксировано в логе).")
+                print(
+                    f"[УСПЕХ] Приоритет заявки #{ticket.id} изменен на '{ticket.priority.value}' вручную (зафиксировано в логе)."
+                )
             else:
                 print("Заявка не найдена.")
         except ValueError:
@@ -154,7 +168,9 @@ class ConsoleUI:
             s_choice = StatusChoice(s_input)
             ticket = self.service.change_status(t_id, STATUS_MAP[s_choice])
             if ticket:
-                print(f"[УСПЕХ] Статус заявки #{ticket.id} обновлен на '{ticket.status.value}'.")
+                print(
+                    f"[УСПЕХ] Статус заявки #{ticket.id} обновлен на '{ticket.status.value}'."
+                )
             else:
                 print("Заявка не найдена.")
         except ValueError:

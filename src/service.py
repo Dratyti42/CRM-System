@@ -36,7 +36,9 @@ class CRMService:
             Priority.MEDIUM: 2,
             Priority.LOW: 3,
         }
-        return sorted(self.repo.get_all(), key=lambda ticket: priority_weights[ticket.priority])
+        return sorted(
+            self.repo.get_all(), key=lambda ticket: priority_weights[ticket.priority]
+        )
 
     def take_ticket_to_work(self, ticket_id: int, operator_name: str) -> Ticket | None:
         """Назначить оператора и перевести заявку в статус обработки."""
@@ -46,7 +48,9 @@ class CRMService:
             ticket.operator_name = operator_name
         return ticket
 
-    def override_priority(self, ticket_id: int, new_priority: Priority) -> Ticket | None:
+    def override_priority(
+        self, ticket_id: int, new_priority: Priority
+    ) -> Ticket | None:
         """Вручную изменить приоритет заявки с установкой признака корректировки."""
         ticket = self.repo.get_by_id(ticket_id)
         if ticket:

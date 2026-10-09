@@ -9,17 +9,14 @@ class BaseTicketRepository(ABC):
     @abstractmethod
     def add(self, ticket_data: dict) -> Ticket:
         """Сохранить новую заявку в хранилище."""
-        pass
 
     @abstractmethod
     def get_all(self) -> list[Ticket]:
         """Получить полный перечень заявок."""
-        pass
 
     @abstractmethod
     def get_by_id(self, ticket_id: int) -> Ticket | None:
         """Найти заявку по первичному ключу."""
-        pass
 
 
 class TicketRepository(BaseTicketRepository):
