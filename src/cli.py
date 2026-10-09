@@ -1,14 +1,62 @@
-from src.classifier import KeywordAIAgent
+from enum import IntEnum
+
 from src.models import Priority, Status
-from src.repository import TicketRepository
 from src.service import CRMService
 
 
+class MainMenuChoice(IntEnum):
+    """Пункты главного меню консольного интерфейса."""
+
+    EXIT = 0
+    CREATE_TICKET = 1
+    LIST_TICKETS = 2
+    TAKE_TICKET = 3
+    OVERRIDE_PRIORITY = 4
+    CHANGE_STATUS = 5
+
+
+class PriorityChoice(IntEnum):
+    """Выбор приоритета в консоли."""
+
+    LOW = 1
+    MEDIUM = 2
+    HIGH = 3
+    CRITICAL = 4
+
+
+class StatusChoice(IntEnum):
+    """Выбор статуса в консоли."""
+
+    IN_PROGRESS = 1
+    WAITING_CLIENT = 2
+    RESOLVED = 3
+    CLOSED = 4
+
+
+PRIORITY_MAP: dict[PriorityChoice, Priority] = {
+    PriorityChoice.LOW: Priority.LOW,
+    PriorityChoice.MEDIUM: Priority.MEDIUM,
+    PriorityChoice.HIGH: Priority.HIGH,
+    PriorityChoice.CRITICAL: Priority.CRITICAL,
+}
+
+STATUS_MAP: dict[StatusChoice, Status] = {
+    StatusChoice.IN_PROGRESS: Status.IN_PROGRESS,
+    StatusChoice.WAITING_CLIENT: Status.WAITING_CLIENT,
+    StatusChoice.RESOLVED: Status.RESOLVED,
+    StatusChoice.CLOSED: Status.CLOSED,
+}
+
+
 class ConsoleUI:
-    def __init__(self, service: CRMService):
+    """Консольный пользовательский интерфейс для работы с CRM."""
+
+    def __init__(self, service: CRMService) -> None:
+        """Инициализировать интерфейс сервисом прикладной логики."""
         self.service = service
 
-    def run(self):
+    def run(self) -> None:
+        """Запустить главный цикл взаимодействия с пользователем."""
         while True:
             print("\n" + "=" * 45)
             print("  CRM-СИСТЕМА С ИИ-ПРИОРИТИЗАЦИЕЙ")
@@ -19,25 +67,30 @@ class ConsoleUI:
             print("4. [Оператор] Вручную изменить приоритет")
             print("5. [Оператор] Изменить статус заявки")
             print("0. Выход")
-            choice = input("\nВыберите действие: ").strip()
 
-            if choice == "1":
+            try:
+                raw_input = int(input("\nВыберите действие: ").strip())
+                choice = MainMenuChoice(raw_input)
+            except ValueError:
+                print("Неверный ввод, попробуйте еще раз.")
+                continue
+
+            if choice == MainMenuChoice.CREATE_TICKET:
                 self._create_ticket()
-            elif choice == "2":
+            elif choice == MainMenuChoice.LIST_TICKETS:
                 self._list_tickets()
-            elif choice == "3":
+            elif choice == MainMenuChoice.TAKE_TICKET:
                 self._take_ticket()
-            elif choice == "4":
+            elif choice == MainMenuChoice.OVERRIDE_PRIORITY:
                 self._override_priority()
-            elif choice == "5":
+            elif choice == MainMenuChoice.CHANGE_STATUS:
                 self._change_status()
-            elif choice == "0":
+            elif choice == MainMenuChoice.EXIT:
                 print("Выход из системы. До свидания!")
                 break
-            else:
-                print("Неверный ввод, попробуйте еще раз.")
 
-    def _create_ticket(self):
+    def _create_ticket(self) -> None:
+        """Обработать диалог подачи обращения клиентом."""
         print("\n--- СОЗДАНИЕ ЗАЯВКИ ---")
         client_name = input("Ваше имя / Email: ").strip()
         title = input("Тема обращения: ").strip()
@@ -49,7 +102,8 @@ class ConsoleUI:
         if ticket.confidence_score < 0.6:
             print("-> Примечание: Требуется подтверждение приоритета оператором (низкая уверенность ИИ).")
 
-    def _list_tickets(self):
+    def _list_tickets(self) -> None:
+        """Отобразить упорядоченный список обращений для оператора."""
         tickets = self.service.get_tickets_for_operator()
         if not tickets:
             print("\nОчередь заявок пуста.")
@@ -63,7 +117,8 @@ class ConsoleUI:
             print(f"    Оператор: {t.operator_name or 'Не назначен'}")
             print("-" * 45)
 
-    def _take_ticket(self):
+    def _take_ticket(self) -> None:
+        """Передать обращение в работу указанному оператору."""
         try:
             t_id = int(input("\nВведите ID заявки: "))
             operator = input("Имя оператора: ").strip()
@@ -75,41 +130,32 @@ class ConsoleUI:
         except ValueError:
             print("Ошибка: введите корректный числовой ID.")
 
-    def _override_priority(self):
+    def _override_priority(self) -> None:
+        """Изменить категорию приоритета вручную."""
         try:
             t_id = int(input("\nВведите ID заявки: "))
             print("Доступные приоритеты: 1. Низкий | 2. Средний | 3. Высокий | 4. Наивысший")
-            p_map = {"1": Priority.LOW, "2": Priority.MEDIUM, "3": Priority.HIGH, "4": Priority.CRITICAL}
-            p_choice = input("Выберите новый приоритет (1-4): ").strip()
-            if p_choice in p_map:
-                ticket = self.service.override_priority(t_id, p_map[p_choice])
-                if ticket:
-                    print(f"[УСПЕХ] Приоритет заявки #{ticket.id} изменен на '{ticket.priority.value}' вручную (зафиксировано в логе).")
-                else:
-                    print("Заявка не найдена.")
+            p_input = int(input("Выберите новый приоритет (1-4): ").strip())
+            p_choice = PriorityChoice(p_input)
+            ticket = self.service.override_priority(t_id, PRIORITY_MAP[p_choice])
+            if ticket:
+                print(f"[УСПЕХ] Приоритет заявки #{ticket.id} изменен на '{ticket.priority.value}' вручную (зафиксировано в логе).")
             else:
-                print("Неверный выбор приоритета.")
+                print("Заявка не найдена.")
         except ValueError:
-            print("Ошибка ввода.")
+            print("Ошибка: выбран некорректный вариант.")
 
-    def _change_status(self):
+    def _change_status(self) -> None:
+        """Обновить статус текущей заявки."""
         try:
             t_id = int(input("\nВведите ID заявки: "))
             print("Статусы: 1. В работе | 2. Ожидает ответа | 3. Решена | 4. Закрыта")
-            s_map = {
-                "1": Status.IN_PROGRESS,
-                "2": Status.WAITING_CLIENT,
-                "3": Status.RESOLVED,
-                "4": Status.CLOSED,
-            }
-            s_choice = input("Выберите новый статус (1-4): ").strip()
-            if s_choice in s_map:
-                ticket = self.service.change_status(t_id, s_map[s_choice])
-                if ticket:
-                    print(f"[УСПЕХ] Статус заявки #{ticket.id} обновлен на '{ticket.status.value}'.")
-                else:
-                    print("Заявка не найдена.")
+            s_input = int(input("Выберите новый статус (1-4): ").strip())
+            s_choice = StatusChoice(s_input)
+            ticket = self.service.change_status(t_id, STATUS_MAP[s_choice])
+            if ticket:
+                print(f"[УСПЕХ] Статус заявки #{ticket.id} обновлен на '{ticket.status.value}'.")
             else:
-                print("Неверный выбор статуса.")
+                print("Заявка не найдена.")
         except ValueError:
-            print("Ошибка ввода.")
+            print("Ошибка: выбран некорректный вариант.")
