@@ -1,9 +1,10 @@
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional
 
 
 class Priority(str, Enum):
+    """Приоритеты выполнения заявок."""
+
     LOW = "Низкий"
     MEDIUM = "Средний"
     HIGH = "Высокий"
@@ -11,6 +12,8 @@ class Priority(str, Enum):
 
 
 class Status(str, Enum):
+    """Жизненный цикл заявки."""
+
     NEW = "Новая"
     IN_PROGRESS = "В работе"
     WAITING_CLIENT = "Ожидает ответа клиента"
@@ -19,6 +22,8 @@ class Status(str, Enum):
 
 
 class Role(str, Enum):
+    """Роли пользователей в системе."""
+
     CLIENT = "Клиент"
     OPERATOR = "Оператор"
     ADMIN = "Администратор"
@@ -26,6 +31,8 @@ class Role(str, Enum):
 
 @dataclass
 class User:
+    """Модель пользователя системы."""
+
     id: int
     name: str
     role: Role
@@ -33,6 +40,8 @@ class User:
 
 @dataclass
 class Ticket:
+    """Сущность клиентской заявки."""
+
     id: int
     title: str
     description: str
@@ -40,5 +49,5 @@ class Ticket:
     priority: Priority
     confidence_score: float
     status: Status = Status.NEW
-    operator_name: Optional[str] = None
+    operator_name: str | None = None
     manual_priority_override: bool = False
