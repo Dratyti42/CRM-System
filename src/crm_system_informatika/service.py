@@ -30,9 +30,7 @@ class CRMService:
         self._repo = repo
         self._classifier = classifier
 
-    def _validate_ticket(
-        self, title: str, description: str, client_name: str
-    ) -> None:
+    def _validate_ticket(self, title: str, description: str, client_name: str) -> None:
         """Проверить обязательные поля заявки на отсутствие пустых строк."""
         if not title.strip():
             raise ValueError("Тема обращения не может быть пустой.")
@@ -57,9 +55,7 @@ class CRMService:
 
     def get_tickets_for_operator(self) -> list[Ticket]:
         """Получить заявки, отсортированные по уровню критичности."""
-        return sorted(
-            self._repo.get_all(), key=lambda t: PRIORITY_WEIGHTS[t.priority]
-        )
+        return sorted(self._repo.get_all(), key=lambda t: PRIORITY_WEIGHTS[t.priority])
 
     def take_ticket_to_work(self, ticket_id: int, operator_name: str) -> Ticket | None:
         """Назначить оператора и перевести заявку в работу через метод обновления."""
@@ -96,9 +92,7 @@ class CRMService:
         if ticket is None:
             return None
 
-        allowed_transitions = ALLOWED_STATUS_TRANSITIONS.get(
-            ticket.status, set()
-        )
+        allowed_transitions = ALLOWED_STATUS_TRANSITIONS.get(ticket.status, set())
         if new_status not in allowed_transitions:
             raise ValueError(
                 f"Недопустимый переход из статуса '{ticket.status.value}' в '{new_status.value}'."
