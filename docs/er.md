@@ -1,3 +1,4 @@
+```mermaid
 erDiagram
     USERS ||--o{ TICKETS : "creates (as client)"
     USERS ||--o{ TICKETS : "assigns (as operator)"
@@ -45,3 +46,4 @@ erDiagram
         string reason
         datetime created_at
     }
+```mermaid
