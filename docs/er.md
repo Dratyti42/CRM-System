@@ -46,4 +46,4 @@ erDiagram
         string reason
         datetime created_at
     }
-```mermaid
+```
