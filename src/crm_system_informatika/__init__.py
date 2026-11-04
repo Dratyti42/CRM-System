@@ -1,2 +1,5 @@
-def main() -> None:
-    print("Hello from crm-system-informatika!")
+"""Пакет CRM-системы с интеллектуальной приоритизацией обращений."""
+
+from .main import main
+
+__all__ = ["main"]

@@ -17,7 +17,7 @@ dependencies = [
 ]
 
 [project.scripts]
-crm-system-informatika = "crm_system_informatika:main"
+crm-system-informatika = "crm_system_informatika.main:main"
 
 [build-system]
 requires = ["uv_build>=0.12.19,<0.13.0"]
