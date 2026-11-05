@@ -1,12 +1,16 @@
+"""Точка входа приложения: инициализация зависимостей с подключением к PostgreSQL."""
+
 from .classifier import KeywordAIAgent
 from .cli import ConsoleUI
-from .repository import TicketRepository
+from .database.session import SessionFactory
+from .repository import SQLAlchemyTicketRepository
 from .service import CRMService
 
 
 def main() -> None:
     """Точка входа: сборка зависимостей и запуск приложения."""
-    repo = TicketRepository()
+    # Используем репозиторий базы данных PostgreSQL
+    repo = SQLAlchemyTicketRepository(session_factory=SessionFactory)
     ai_agent = KeywordAIAgent()
     crm_service = CRMService(repo=repo, classifier=ai_agent)
 
