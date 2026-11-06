@@ -3,7 +3,10 @@ erDiagram
     USERS ||--o{ TICKETS : "creates (as client)"
     USERS ||--o{ TICKETS : "assigns (as operator)"
     TICKETS ||--o{ TICKET_AUDIT_LOGS : "has"
-    TICKETS }o--o{ TAGS : "categorized by"
+    
+    
+    TICKETS ||--o{ TICKET_TAGS : "includes"
+    TAGS ||--o{ TICKET_TAGS : "applied to"
 
     USERS {
         int id PK
@@ -46,4 +49,3 @@ erDiagram
         string reason
         datetime created_at
     }
-```
