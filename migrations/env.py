@@ -5,7 +5,12 @@ from sqlalchemy import engine_from_config, pool
 
 from src.crm_system_informatika.configs.settings import settings
 from src.crm_system_informatika.database.base import Base
-
+from src.crm_system_informatika.database.models import (  # noqa: F401
+    TagModel,
+    TicketAuditLogModel,
+    TicketModel,
+    UserModel,
+)
 config = context.config
 
 if config.config_file_name is not None:
