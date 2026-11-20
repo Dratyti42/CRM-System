@@ -1,10 +1,22 @@
+"""Консольный пользовательский интерфейс CRM-системы."""
+
+import re
 from enum import IntEnum
 
+from .classifier import ClassifierFactory
+from .configs.settings import settings
+from .database.session import SessionFactory
+from .database.uow import SQLAlchemyUnitOfWork
+from .exceptions import CRMError
 from .models import Priority, Status
+from .observers import (
+    ActivityLogObserver,
+    HighPriorityAlertObserver,
+    TicketEventPublisher,
+)
 from .service import CRMService
-import re
 
-CONFIDENCE_THRESHOLD: float = 0.6
+EMAIL_REGEX = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
 
 
 class MainMenuChoice(IntEnum):
@@ -96,23 +108,23 @@ class ConsoleUI:
         """Обработать диалог подачи обращения с перехватом ошибок валидации."""
         print("\n--- СОЗДАНИЕ ЗАЯВКИ ---")
         client_name = input("Ваше имя: ").strip()
-        email_regex = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
         while True:
-            try:
-                client_email = input("Введите ваш Email: ").strip()
-                if not re.match(email_regex, client_email):
-                    raise ValueError("Неверный формат почты.")
+            client_email = input("Введите ваш Email: ").strip()
+            if re.match(EMAIL_REGEX, client_email):
                 break
-            except ValueError as e:
-                print(f"Ошибка{e}")
-        client_name = client_name + " " + client_email
-        
+            print("Ошибка: неверный формат почты.")
+
         title = input("Тема обращения: ").strip()
         desc = input("Описание проблемы: ").strip()
 
         try:
-            ticket = self._service.create_ticket(title, desc, client_name)
-        except ValueError as err:
+            ticket = self._service.create_ticket(
+                title=title,
+                description=desc,
+                client_name=client_name,
+                client_email=client_email,
+            )
+        except CRMError as err:
             print(f"\n[ОШИБКА ВАЛИДАЦИИ] {err}")
             return
 
@@ -120,11 +132,13 @@ class ConsoleUI:
             f"\n[УСПЕХ] Заявка #{ticket.id} создана со статусом '{ticket.status.value}'!"
         )
         print(
-            f"-> ИИ определил приоритет: [{ticket.priority.value}] (Уверенность: {ticket.confidence_score * 100:.0f}%)"
+            f"-> ИИ определил приоритет: [{ticket.priority.value}] "
+            f"(Уверенность: {ticket.confidence_score * 100:.0f}%)"
         )
-        if ticket.confidence_score < CONFIDENCE_THRESHOLD:
+        if ticket.confidence_score < settings.confidence_threshold:
             print(
-                "-> Примечание: Требуется подтверждение приоритета оператором (низкая уверенность ИИ)."
+                "-> Примечание: Требуется подтверждение приоритета оператором "
+                "(низкая уверенность ИИ)."
             )
 
     def _list_tickets(self) -> None:
@@ -138,7 +152,8 @@ class ConsoleUI:
         for t in tickets:
             override_flag = " [РУЧНОЙ ПРИОРИТЕТ]" if t.manual_priority_override else ""
             print(
-                f"#{t.id} | Приоритет: {t.priority.value:<9}{override_flag} | Статус: {t.status.value:<12} | Клиент: {t.client_name.split()[0]}"
+                f"#{t.id} | Приоритет: {t.priority.value:<9}{override_flag} | "
+                f"Статус: {t.status.value:<12} | Клиент: {t.client_name}"
             )
             print(f"    Тема: {t.title}")
             print(f"    Оператор: {t.operator_name or 'Не назначен'}")
@@ -150,13 +165,11 @@ class ConsoleUI:
             t_id = int(input("\nВведите ID заявки: "))
             operator = input("Имя оператора: ").strip()
             ticket = self._service.take_ticket_to_work(t_id, operator)
-            if ticket:
-                print(
-                    f"[УСПЕХ] Заявка #{ticket.id} переведена в статус '{ticket.status.value}', оператор: {operator}"
-                )
-            else:
-                print("Заявка с таким ID не найдена.")
-        except ValueError as err:
+            print(
+                f"[УСПЕХ] Заявка #{ticket.id} переведена в статус "
+                f"'{ticket.status.value}', оператор: {ticket.operator_name}"
+            )
+        except (ValueError, CRMError) as err:
             print(f"[ОШИБКА] {err}")
 
     def _override_priority(self) -> None:
@@ -168,15 +181,18 @@ class ConsoleUI:
             )
             p_input = int(input("Выберите новый приоритет (1-4): ").strip())
             p_choice = PriorityChoice(p_input)
-            ticket = self._service.override_priority(t_id, PRIORITY_MAP[p_choice])
-            if ticket:
-                print(
-                    f"[УСПЕХ] Приоритет заявки #{ticket.id} изменен на '{ticket.priority.value}' вручную (зафиксировано в логе)."
-                )
-            else:
-                print("Заявка не найдена.")
-        except ValueError:
-            print("Ошибка: введен некорректный номер или ID.")
+            reason = input("Причина корректировки (опционально): ").strip()
+            ticket = self._service.override_priority(
+                ticket_id=t_id,
+                new_priority=PRIORITY_MAP[p_choice],
+                reason=reason or None,
+            )
+            print(
+                f"[УСПЕХ] Приоритет заявки #{ticket.id} изменен на "
+                f"'{ticket.priority.value}' вручную (зафиксировано в логе)."
+            )
+        except (ValueError, CRMError) as err:
+            print(f"[ОШИБКА] {err}")
 
     def _change_status(self) -> None:
         """Обновить статус текущей заявки с обработкой бизнес-правил перехода."""
@@ -186,11 +202,19 @@ class ConsoleUI:
             s_input = int(input("Выберите новый статус (1-4): ").strip())
             s_choice = StatusChoice(s_input)
             ticket = self._service.change_status(t_id, STATUS_MAP[s_choice])
-            if ticket:
-                print(
-                    f"[УСПЕХ] Статус заявки #{ticket.id} обновлен на '{ticket.status.value}'."
-                )
-            else:
-                print("Заявка не найдена.")
-        except ValueError as err:
+            print(
+                f"[УСПЕХ] Статус заявки #{ticket.id} обновлен на '{ticket.status.value}'."
+            )
+        except (ValueError, CRMError) as err:
             print(f"[ОШИБКА] {err}")
+
+
+def run_cli() -> None:
+    """Собрать зависимости и запустить консольный интерфейс."""
+    uow = SQLAlchemyUnitOfWork(session_factory=SessionFactory)
+    classifier = ClassifierFactory.create(settings.classifier_strategy)
+    publisher = TicketEventPublisher(
+        observers=[ActivityLogObserver(), HighPriorityAlertObserver()]
+    )
+    service = CRMService(uow=uow, classifier=classifier, publisher=publisher)
+    ConsoleUI(service=service).run()
