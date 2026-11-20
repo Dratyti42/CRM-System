@@ -1,3 +1,5 @@
+"""ORM-модели SQLAlchemy 2.0 для схемы базы данных CRM."""
+
 from datetime import datetime
 
 from sqlalchemy import (
@@ -15,7 +17,6 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base
 
-# Промежуточная таблица M:N между заявками и тегами
 ticket_tags = Table(
     "ticket_tags",
     Base.metadata,
@@ -45,7 +46,6 @@ class UserModel(Base):
         DateTime(timezone=True), server_default=func.now()
     )
 
-    # 1:N Связи
     created_tickets: Mapped[list["TicketModel"]] = relationship(
         back_populates="client",
         foreign_keys="TicketModel.client_id",
@@ -64,7 +64,6 @@ class TagModel(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(50), unique=True)
 
-    # M:N Связь
     tickets: Mapped[list["TicketModel"]] = relationship(
         secondary=ticket_tags,
         back_populates="tags",
@@ -102,7 +101,6 @@ class TicketModel(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
-    # Связи 1:N
     client: Mapped["UserModel"] = relationship(
         back_populates="created_tickets",
         foreign_keys=[client_id],
@@ -115,8 +113,6 @@ class TicketModel(Base):
         back_populates="ticket",
         cascade="all, delete-orphan",
     )
-
-    # Связь M:N
     tags: Mapped[list["TagModel"]] = relationship(
         secondary=ticket_tags,
         back_populates="tickets",
@@ -141,3 +137,6 @@ class TicketAuditLogModel(Base):
     )
 
     ticket: Mapped["TicketModel"] = relationship(back_populates="audit_logs")
+    changed_by_user: Mapped["UserModel"] = relationship(
+        foreign_keys=[changed_by_user_id]
+    )
