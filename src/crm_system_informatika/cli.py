@@ -2,6 +2,7 @@ from enum import IntEnum
 
 from .models import Priority, Status
 from .service import CRMService
+import re
 
 CONFIDENCE_THRESHOLD: float = 0.6
 
@@ -94,7 +95,18 @@ class ConsoleUI:
     def _create_ticket(self) -> None:
         """Обработать диалог подачи обращения с перехватом ошибок валидации."""
         print("\n--- СОЗДАНИЕ ЗАЯВКИ ---")
-        client_name = input("Ваше имя / Email: ").strip()
+        client_name = input("Ваше имя: ").strip()
+        email_regex = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
+        while True:
+            try:
+                client_email = input("Введите ваш Email: ").strip()
+                if not re.match(email_regex, client_email):
+                    raise ValueError("Неверный формат почты.")
+                break
+            except ValueError as e:
+                print(f"Ошибка{e}")
+        client_name = client_name + " " + client_email
+        
         title = input("Тема обращения: ").strip()
         desc = input("Описание проблемы: ").strip()
 
