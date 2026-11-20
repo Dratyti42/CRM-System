@@ -49,11 +49,9 @@ class TicketDraft:
     confidence_score: float
 
 
-@dataclass
-class Ticket:
-    """Сущность клиентской заявки в системе."""
-
-    id: int
+@dataclass(kw_only=True)
+class TicketAdd:
+    """Данные заявки без идентификатора (используются при создании)."""
     title: str
     description: str
     client_name: str
@@ -62,3 +60,9 @@ class Ticket:
     status: Status = Status.NEW
     operator_name: str | None = None
     manual_priority_override: bool = False
+
+
+@dataclass(kw_only=True)
+class Ticket(TicketAdd):
+    """Сохранённая заявка: данные заявки плюс идентификатор."""
+    id: int
