@@ -1,15 +1,25 @@
-import os
+"""Настройки приложения на базе Pydantic Settings."""
 
-DEFAULT_DATABASE_URL = (
-    "postgresql+psycopg://crm_user:crm_password@localhost:5432/crm_db"
-)
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-class Settings:
-    """Настройки приложения, читаемые из переменных окружения."""
+class Settings(BaseSettings):
+    """Параметры конфигурации CRM-системы из переменных окружения."""
 
-    def __init__(self) -> None:
-        self.database_url: str = os.getenv("DATABASE_URL", DEFAULT_DATABASE_URL)
+    database_url: str = (
+        "postgresql+psycopg://crm_user:crm_password@localhost:5432/crm_db"
+    )
+    classifier_strategy: str = "keyword"
+    confidence_threshold: float = 0.6
+    app_host: str = "0.0.0.0"
+    app_port: int = 8000
+    app_title: str = "CRM-система с интеллектуальной приоритизацией"
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
 
 settings = Settings()
