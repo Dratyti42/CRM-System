@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+
+{% block content %}
+{% if alerts %}
+<div class="alert alert-warn">
+    <strong>Срочные оповещения оператора:</strong>
+    <ul style="margin: 0.4rem 0 0 1.2rem; padding: 0;">
+        {% for alert in alerts %}
+        <li>
+            <a href="/tickets/{{ alert.ticket_id }}" style="color: inherit; font-weight: 700;">
+                {{ alert.message }}
+            </a> — {{ alert.title }}
+        </li>
+        {% endfor %}
+    </ul>
+</div>
+{% endif %}
+
+<div class="grid">
+    <section class="card">
+        <h2>Новая заявка (Клиент)</h2>
+        <form action="/web/tickets" method="post">
+            <label for="client_name">Ваше имя</label>
+            <input id="client_name" name="client_name" type="text" required placeholder="Иван Иванов">
+
+            <label for="client_email">Email</label>
+            <input id="client_email" name="client_email" type="email" required placeholder="ivan@example.com">
+
+            <label for="title">Тема обращения</label>
+            <input id="title" name="title" type="text" required placeholder="Например: Упал сервер оплаты">
+
+            <label for="description">Описание проблемы</label>
+            <textarea id="description" name="description" required placeholder="Опишите ситуацию подробнее..."></textarea>
+
+            <button type="submit">Отправить заявку</button>
+        </form>
+    </section>
+
+    <section class="card">
+        <h2>Очередь заявок (Оператор) — {{ tickets | length }}</h2>
+
+        <form method="get" action="/" class="filters">
+            <div>
+                <label for="priority">Приоритет</label>
+                <select id="priority" name="priority">
+                    <option value="">Все приоритеты</option>
+                    {% for p in priorities %}
+                    <option value="{{ p.value }}" {% if selected_priority == p.value %}selected{% endif %}>
+                        {{ p.value }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="status">Статус</label>
+                <select id="status" name="status">
+                    <option value="">Все статусы</option>
+                    {% for s in statuses %}
+                    <option value="{{ s.value }}" {% if selected_status == s.value %}selected{% endif %}>
+                        {{ s.value }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <button type="submit">Фильтровать</button>
+                <a href="/" class="btn btn-secondary">Сброс</a>
+            </div>
+        </form>
+
+        {% if tickets %}
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Приоритет</th>
+                    <th>Тема и клиент</th>
+                    <th>Статус</th>
+                    <th>Оператор</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for ticket in tickets %}
+                <tr>
+                    <td>#{{ ticket.id }}</td>
+                    <td>
+                        <span class="badge p-{{ ticket.priority.value }}">{{ ticket.priority.value }}</span>
+                        <div class="muted">ИИ: {{ (ticket.confidence_score * 100) | round | int }}%</div>
+                        {% if ticket.manual_priority_override %}
+                            <span class="badge tag-manual">Ручной</span>
+                        {% elif ticket.needs_review %}
+                            <span class="badge tag-review">Проверить</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <strong>{{ ticket.title }}</strong>
+                        <div class="muted">{{ ticket.client_name }} ({{ ticket.client_email or "—" }})</div>
+                    </td>
+                    <td><span class="badge tag-status">{{ ticket.status.value }}</span></td>
+                    <td>{{ ticket.operator_name or "Не назначен" }}</td>
+                    <td><a href="/tickets/{{ ticket.id }}" class="btn">Открыть</a></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+            <p class="muted">Заявок по заданным критериям пока нет.</p>
+        {% endif %}
+    </section>
+</div>
+{% endblock %}
