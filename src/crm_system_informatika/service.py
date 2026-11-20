@@ -1,6 +1,18 @@
+"""Слой прикладной бизнес-логики (Service Layer) управления заявками."""
+
+import re
+
 from .classifier import BasePriorityClassifier
-from .models import Priority, Status, Ticket, TicketDraft
-from .repository import BaseTicketRepository
+from .database.uow import BaseUnitOfWork
+from .exceptions import (
+    DomainValidationError,
+    InvalidStatusTransitionError,
+    TicketNotFoundError,
+)
+from .models import Priority, Status, Ticket, TicketAuditLog, TicketDraft
+from .observers import TicketEvent, TicketEventPublisher, TicketEventType
+
+EMAIL_REGEX = re.compile(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$")
 
 PRIORITY_WEIGHTS: dict[Priority, int] = {
     Priority.CRITICAL: 0,
@@ -19,84 +31,214 @@ ALLOWED_STATUS_TRANSITIONS: dict[Status, set[Status]] = {
 
 
 class CRMService:
-    """Сервис бизнес-логики управления заявками."""
+    """Сервис бизнес-логики, оркестрирующий Unit of Work, классификатор и события."""
 
     def __init__(
         self,
-        repo: BaseTicketRepository,
+        uow: BaseUnitOfWork,
         classifier: BasePriorityClassifier,
+        publisher: TicketEventPublisher | None = None,
     ) -> None:
-        """Инициализировать сервис через защищенные ссылки на абстракции."""
-        self._repo = repo
+        """Инициализировать сервис ссылками на абстракции."""
+        self._uow = uow
         self._classifier = classifier
+        self._publisher = publisher or TicketEventPublisher()
 
-    def _validate_ticket(self, title: str, description: str, client_name: str) -> None:
-        """Проверить обязательные поля заявки на отсутствие пустых строк."""
+    def _validate_ticket(
+        self,
+        title: str,
+        description: str,
+        client_name: str,
+        client_email: str,
+    ) -> None:
+        """Проверить обязательные поля новой заявки."""
         if not title.strip():
-            raise ValueError("Тема обращения не может быть пустой.")
+            raise DomainValidationError("Тема обращения не может быть пустой.")
         if not description.strip():
-            raise ValueError("Описание проблемы не может быть пустым.")
+            raise DomainValidationError("Описание проблемы не может быть пустым.")
         if not client_name.strip():
-            raise ValueError("Имя клиента не может быть пустым.")
+            raise DomainValidationError("Имя клиента не может быть пустым.")
+        if not EMAIL_REGEX.match(client_email.strip()):
+            raise DomainValidationError("Указан некорректный формат email.")
 
-    def create_ticket(self, title: str, description: str, client_name: str) -> Ticket:
-        """Создать заявку через валидацию, расчет ИИ и сохранение черновика."""
-        self._validate_ticket(title, description, client_name)
+    def get_allowed_transitions(self, status: Status) -> list[Status]:
+        """Вернуть допустимые следующие статусы для указанного состояния."""
+        return sorted(
+            ALLOWED_STATUS_TRANSITIONS.get(status, set()),
+            key=lambda s: list(Status).index(s),
+        )
+
+    def create_ticket(
+        self,
+        title: str,
+        description: str,
+        client_name: str,
+        client_email: str,
+    ) -> Ticket:
+        """Создать заявку через валидацию, расчет приоритета ИИ и фиксацию в UoW."""
+        self._validate_ticket(title, description, client_name, client_email)
         priority, confidence = self._classifier.predict(title, description)
 
         draft = TicketDraft(
             title=title.strip(),
             description=description.strip(),
             client_name=client_name.strip(),
+            client_email=client_email.strip().lower(),
             priority=priority,
             confidence_score=confidence,
         )
-        return self._repo.add(draft)
 
-    def get_tickets_for_operator(self) -> list[Ticket]:
-        """Получить заявки, отсортированные по уровню критичности."""
-        return sorted(self._repo.get_all(), key=lambda t: PRIORITY_WEIGHTS[t.priority])
+        with self._uow:
+            ticket = self._uow.tickets.add(draft)
+            self._uow.commit()
 
-    def take_ticket_to_work(self, ticket_id: int, operator_name: str) -> Ticket | None:
-        """Назначить оператора и перевести заявку в работу через метод обновления."""
-        ticket = self._repo.get_by_id(ticket_id)
-        if ticket is None:
-            return None
-
-        if Status.IN_PROGRESS not in ALLOWED_STATUS_TRANSITIONS.get(
-            ticket.status, set()
-        ):
-            raise ValueError(
-                f"Невозможно взять в работу заявку в статусе '{ticket.status.value}'."
+        self._publisher.notify(
+            TicketEvent(
+                event_type=TicketEventType.CREATED,
+                ticket=ticket,
+                details=f"Создана клиентом {ticket.client_name}",
             )
+        )
+        return ticket
 
-        ticket.status = Status.IN_PROGRESS
-        ticket.operator_name = operator_name.strip()
-        return self._repo.update(ticket)
+    def get_tickets_for_operator(
+        self,
+        priority: Priority | None = None,
+        status: Status | None = None,
+    ) -> list[Ticket]:
+        """Получить заявки, отсортированные по уровню критичности."""
+        with self._uow:
+            tickets = self._uow.tickets.get_all(priority=priority, status=status)
+        return sorted(tickets, key=lambda t: (PRIORITY_WEIGHTS[t.priority], t.id))
+
+    def get_ticket_by_id(self, ticket_id: int) -> Ticket:
+        """Получить заявку по идентификатору или выбросить TicketNotFoundError."""
+        with self._uow:
+            ticket = self._uow.tickets.get_by_id(ticket_id)
+        if ticket is None:
+            raise TicketNotFoundError(ticket_id)
+        return ticket
+
+    def get_ticket_audit_logs(self, ticket_id: int) -> list[TicketAuditLog]:
+        """Получить историю ручных корректировок приоритета по заявке."""
+        with self._uow:
+            ticket = self._uow.tickets.get_by_id(ticket_id)
+            if ticket is None:
+                raise TicketNotFoundError(ticket_id)
+            return self._uow.tickets.get_audit_logs(ticket_id)
+
+    def take_ticket_to_work(
+        self,
+        ticket_id: int,
+        operator_name: str,
+        operator_email: str | None = None,
+    ) -> Ticket:
+        """Назначить оператора и перевести заявку в статус «В работе»."""
+        if not operator_name.strip():
+            raise DomainValidationError("Имя оператора не может быть пустым.")
+
+        with self._uow:
+            ticket = self._uow.tickets.get_by_id(ticket_id)
+            if ticket is None:
+                raise TicketNotFoundError(ticket_id)
+
+            if Status.IN_PROGRESS not in ALLOWED_STATUS_TRANSITIONS.get(
+                ticket.status, set()
+            ):
+                raise InvalidStatusTransitionError(
+                    f"Невозможно взять в работу заявку в статусе '{ticket.status.value}'."
+                )
+
+            ticket.status = Status.IN_PROGRESS
+            ticket.operator_name = operator_name.strip()
+            updated = self._uow.tickets.update(ticket, operator_email=operator_email)
+            self._uow.commit()
+
+        self._publisher.notify(
+            TicketEvent(
+                event_type=TicketEventType.ASSIGNED,
+                ticket=updated,
+                details=f"Назначен оператор {updated.operator_name}",
+            )
+        )
+        return updated
 
     def override_priority(
-        self, ticket_id: int, new_priority: Priority
-    ) -> Ticket | None:
-        """Вручную изменить приоритет заявки и зафиксировать обновление в репозитории."""
-        ticket = self._repo.get_by_id(ticket_id)
-        if ticket is None:
-            return None
+        self,
+        ticket_id: int,
+        new_priority: Priority,
+        operator_name: str | None = None,
+        reason: str | None = None,
+    ) -> Ticket:
+        """Вручную переопределить приоритет и атомарно записать событие в аудит-лог."""
+        with self._uow:
+            ticket = self._uow.tickets.get_by_id(ticket_id)
+            if ticket is None:
+                raise TicketNotFoundError(ticket_id)
 
-        ticket.priority = new_priority
-        ticket.manual_priority_override = True
-        return self._repo.update(ticket)
-
-    def change_status(self, ticket_id: int, new_status: Status) -> Ticket | None:
-        """Обновить статус жизненного цикла с валидацией допустимых переходов."""
-        ticket = self._repo.get_by_id(ticket_id)
-        if ticket is None:
-            return None
-
-        allowed_transitions = ALLOWED_STATUS_TRANSITIONS.get(ticket.status, set())
-        if new_status not in allowed_transitions:
-            raise ValueError(
-                f"Недопустимый переход из статуса '{ticket.status.value}' в '{new_status.value}'."
+            old_priority = ticket.priority
+            actor_name = (
+                operator_name.strip()
+                if operator_name and operator_name.strip()
+                else (ticket.operator_name or "Оператор поддержки")
+            )
+            audit_reason = (
+                reason.strip()
+                if reason and reason.strip()
+                else "Ручная корректировка оператором"
             )
 
-        ticket.status = new_status
-        return self._repo.update(ticket)
+            ticket.priority = new_priority
+            ticket.manual_priority_override = True
+            updated = self._uow.tickets.update(ticket)
+
+            if old_priority != new_priority:
+                self._uow.tickets.add_audit_log(
+                    ticket_id=updated.id,
+                    actor_name=actor_name,
+                    old_priority=old_priority,
+                    new_priority=new_priority,
+                    reason=audit_reason,
+                )
+
+            self._uow.commit()
+
+        self._publisher.notify(
+            TicketEvent(
+                event_type=TicketEventType.PRIORITY_OVERRIDDEN,
+                ticket=updated,
+                details=(
+                    f"Приоритет изменен: {old_priority.value} -> {new_priority.value}"
+                ),
+            )
+        )
+        return updated
+
+    def change_status(self, ticket_id: int, new_status: Status) -> Ticket:
+        """Обновить статус заявки с проверкой графа допустимых переходов."""
+        with self._uow:
+            ticket = self._uow.tickets.get_by_id(ticket_id)
+            if ticket is None:
+                raise TicketNotFoundError(ticket_id)
+
+            allowed_transitions = ALLOWED_STATUS_TRANSITIONS.get(ticket.status, set())
+            if new_status not in allowed_transitions:
+                raise InvalidStatusTransitionError(
+                    f"Недопустимый переход из статуса '{ticket.status.value}' "
+                    f"в '{new_status.value}'."
+                )
+
+            old_status = ticket.status
+            ticket.status = new_status
+            updated = self._uow.tickets.update(ticket)
+            self._uow.commit()
+
+        self._publisher.notify(
+            TicketEvent(
+                event_type=TicketEventType.STATUS_CHANGED,
+                ticket=updated,
+                details=f"Статус изменен: {old_status.value} -> {new_status.value}",
+            )
+        )
+        return updated
+
