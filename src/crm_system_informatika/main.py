@@ -1,21 +1,27 @@
-"""Точка входа приложения: инициализация зависимостей с подключением к PostgreSQL."""
+"""Единая точка входа CRM-системы."""
 
-from .classifier import KeywordAIAgent
-from .cli import ConsoleUI
-from .database.session import SessionFactory
-from .repository import SQLAlchemyTicketRepository
-from .service import CRMService
+import sys
+
+import uvicorn
+
+from .app import create_app
+from .cli import run_cli
+from .configs.settings import settings
+
+app = create_app()
 
 
 def main() -> None:
-    """Точка входа: сборка зависимостей и запуск приложения."""
-    # Используем репозиторий базы данных PostgreSQL
-    repo = SQLAlchemyTicketRepository(session_factory=SessionFactory)
-    ai_agent = KeywordAIAgent()
-    crm_service = CRMService(repo=repo, classifier=ai_agent)
+    """Запустить веб-сервер FastAPI или консольный интерфейс при передаче --cli."""
+    if "--cli" in sys.argv:
+        run_cli()
+        return
 
-    app = ConsoleUI(service=crm_service)
-    app.run()
+    uvicorn.run(
+        app,
+        host=settings.app_host,
+        port=settings.app_port,
+    )
 
 
 if __name__ == "__main__":
