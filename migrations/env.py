@@ -1,3 +1,5 @@
+"""Среда выполнения миграций Alembic."""
+
 from logging.config import fileConfig
 
 from alembic import context
@@ -5,12 +7,15 @@ from sqlalchemy import engine_from_config, pool
 
 from src.crm_system_informatika.configs.settings import settings
 from src.crm_system_informatika.database.base import Base
-from src.crm_system_informatika.database.models import (  # noqa: F401
+from src.crm_system_informatika.database.models import (
     TagModel,
     TicketAuditLogModel,
     TicketModel,
     UserModel,
 )
+
+REGISTERED_MODELS = (UserModel, TagModel, TicketModel, TicketAuditLogModel)
+
 config = context.config
 
 if config.config_file_name is not None:
@@ -22,7 +27,7 @@ target_metadata = Base.metadata
 
 
 def run_migrations_offline() -> None:
-    """Запустить миграции в offline-режиме: без подключения к БД."""
+    """Запустить миграции в offline-режиме без подключения к БД."""
     url = config.get_main_option("sqlalchemy.url")
     context.configure(
         url=url,
@@ -37,6 +42,7 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
+    """Запустить миграции в online-режиме с подключением к БД."""
     configuration = config.get_section(config.config_ini_section, {})
     configuration["sqlalchemy.url"] = settings.database_url
 
@@ -61,3 +67,4 @@ if context.is_offline_mode():
     run_migrations_offline()
 else:
     run_migrations_online()
+    
