@@ -138,7 +138,7 @@ class ConsoleUI:
         for t in tickets:
             override_flag = " [РУЧНОЙ ПРИОРИТЕТ]" if t.manual_priority_override else ""
             print(
-                f"#{t.id} | Приоритет: {t.priority.value:<9}{override_flag} | Статус: {t.status.value:<12} | Клиент: {t.client_name}"
+                f"#{t.id} | Приоритет: {t.priority.value:<9}{override_flag} | Статус: {t.status.value:<12} | Клиент: {t.client_name.split()[0]}"
             )
             print(f"    Тема: {t.title}")
             print(f"    Оператор: {t.operator_name or 'Не назначен'}")
