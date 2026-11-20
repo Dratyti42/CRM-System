@@ -1,5 +1,5 @@
 """Пакет CRM-системы с интеллектуальной приоритизацией обращений."""
 
-from .main import main
+from .main import app, main
 
-__all__ = ["main"]
+__all__ = ["app", "main"]
