@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+
+{% block title %}Заявка #{{ ticket.id }} — {{ app_title }}{% endblock %}
+
+{% block content %}
+<p><a href="/" class="btn btn-secondary">← Назад к очереди заявок</a></p>
+
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: start; flex-wrap: wrap; gap: 0.75rem;">
+        <div>
+            <h1>Заявка #{{ ticket.id }}: {{ ticket.title }}</h1>
+            <p class="muted">
+                Клиент: <strong>{{ ticket.client_name }}</strong> ({{ ticket.client_email or "—" }}) |
+                Оператор: <strong>{{ ticket.operator_name or "Не назначен" }}</strong>
+            </p>
+        </div>
+        <div>
+            <span class="badge p-{{ ticket.priority.value }}">{{ ticket.priority.value }}</span>
+            <span class="badge tag-status">{{ ticket.status.value }}</span>
+            {% if ticket.manual_priority_override %}
+                <span class="badge tag-manual">Ручной приоритет</span>
+            {% elif ticket.needs_review %}
+                <span class="badge tag-review">Требует подтверждения</span>
+            {% endif %}
+        </div>
+    </div>
+
+    <p style="white-space: pre-line; background: #f9fafb; padding: 1rem; border-radius: 8px; border: 1px solid var(--border);">{{ ticket.description }}</p>
+    <p class="muted">Уверенность ИИ: {{ (ticket.confidence_score * 100) | round | int }}%</p>
+</div>
+
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.25rem;">
+    <section class="card">
+        <h3>Взять заявку в работу</h3>
+        {% if can_take %}
+        <form action="/web/tickets/{{ ticket.id }}/take" method="post">
+            <label for="operator_name">Имя оператора</label>
+            <input id="operator_name" name="operator_name" type="text" required value="{{ ticket.operator_name or '' }}" placeholder="Алексей Смирнов">
+            <button type="submit">Взять в работу</button>
+        </form>
+        {% else %}
+            <p class="muted">Заявку в статусе «{{ ticket.status.value }}» нельзя перевести в работу.</p>
+        {% endif %}
+    </section>
+
+    <section class="card">
+        <h3>Изменить статус</h3>
+        {% if allowed_statuses %}
+        <form action="/web/tickets/{{ ticket.id }}/status" method="post">
+            <label for="status">Следующий допустимый статус</label>
+            <select id="status" name="status" required>
+                {% for s in allowed_statuses %}
+                <option value="{{ s.value }}">{{ s.value }}</option>
+                {% endfor %}
+            </select>
+            <button type="submit">Обновить статус</button>
+        </form>
+        {% else %}
+            <p class="muted">Заявка находится в финальном статусе «{{ ticket.status.value }}».</p>
+        {% endif %}
+    </section>
+
+    <section class="card">
+        <h3>Переопределить приоритет</h3>
+        <form action="/web/tickets/{{ ticket.id }}/priority" method="post">
+            <label for="priority">Новый приоритет</label>
+            <select id="priority" name="priority" required>
+                {% for p in priorities %}
+                <option value="{{ p.value }}" {% if ticket.priority == p %}selected{% endif %}>{{ p.value }}</option>
+                {% endfor %}
+            </select>
+
+            <label for="override_operator">Имя оператора</label>
+            <input id="override_operator" name="operator_name" type="text" value="{{ ticket.operator_name or '' }}" placeholder="Оператор поддержки">
+
+            <label for="reason">Причина корректировки</label>
+            <input id="reason" name="reason" type="text" placeholder="Уточнение критичности после звонка">
+
+            <button type="submit">Сохранить приоритет</button>
+        </form>
+    </section>
+</div>
+
+<section class="card">
+    <h3>Журнал аудита изменений приоритета</h3>
+    {% if audit_logs %}
+    <table>
+        <thead>
+            <tr>
+                <th>Дата</th>
+                <th>Сотрудник</th>
+                <th>Было → Стало</th>
+                <th>Причина</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for log in audit_logs %}
+            <tr>
+                <td>{{ log.created_at.strftime("%Y-%m-%d %H:%M:%S") }}</td>
+                <td>{{ log.changed_by_name }}</td>
+                <td>
+                    <span class="badge p-{{ log.old_priority.value }}">{{ log.old_priority.value }}</span>
+                    →
+                    <span class="badge p-{{ log.new_priority.value }}">{{ log.new_priority.value }}</span>
+                </td>
+                <td>{{ log.reason or "—" }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+        <p class="muted">Приоритет этой заявки вручную еще не изменялся.</p>
+    {% endif %}
+</section>
+{% endblock %}
