@@ -1,10 +1,7 @@
-version: '3.8'
-
 services:
   db:
-    image: postgres:16
-    container_name: crm-postgres
-    restart: always
+    image: postgres:16-alpine
+    container_name: crm_postgres
     environment:
       POSTGRES_USER: crm_user
       POSTGRES_PASSWORD: crm_password
@@ -12,8 +9,27 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - crm_pgdata:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U crm_user -d crm_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build: .
+    container_name: crm_app
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg://crm_user:crm_password@db:5432/crm_db
+      CLASSIFIER_STRATEGY: keyword
+      CONFIDENCE_THRESHOLD: "0.6"
+      APP_HOST: 0.0.0.0
+      APP_PORT: "8000"
+    ports:
+      - "8000:8000"
 
 volumes:
-  crm_pgdata:
-    external: true
+  postgres_data:
